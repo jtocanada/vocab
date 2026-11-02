@@ -1,0 +1,1181 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>英単語・英熟語 ハンズフリー学習アプリ</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            #print-area, #print-area * {
+                visibility: visible;
+            }
+            #print-area {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                background: white;
+                padding: 10px;
+            }
+            .no-print {
+                display: none !important;
+            }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+    <!-- ヘッダー -->
+    <header class="bg-indigo-600 text-white shadow-md no-print sticky top-0 z-50">
+        <div class="max-w-4xl mx-auto px-3 py-3 flex flex-col sm:flex-row justify-between items-center gap-3">
+            <h1 class="text-base sm:text-xl font-bold tracking-wide text-center sm:text-left">英単語・英熟語 ハンズフリー学習アプリ</h1>
+            <div class="flex flex-wrap justify-center gap-1.5 sm:space-x-2">
+                <button onclick="switchTab('list')" id="btn-list" class="px-3 py-1.5 rounded-lg font-medium bg-indigo-700 transition text-xs sm:text-sm">単語帳</button>
+                <button onclick="switchTab('quiz')" id="btn-quiz" class="px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-700 transition text-xs sm:text-sm">テスト</button>
+                <button onclick="switchTab('records')" id="btn-records" class="px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-700 transition text-xs sm:text-sm">🌟 がんばり記録</button>
+                <button onclick="switchTab('import')" id="btn-import" class="px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-700 transition text-xs sm:text-sm">単語登録・管理</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- メインコンテンツ -->
+    <main class="max-w-4xl mx-auto px-3 sm:px-4 py-4 sm:py-8 flex-grow w-full">
+
+        <!-- 単語帳タブ -->
+        <section id="tab-list" class="space-y-4 sm:space-y-6">
+            <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col sm:flex-row gap-4 justify-between items-center no-print">
+                <div class="w-full sm:w-1/3">
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">カテゴリ選択 (100問区切り)</label>
+                    <select id="category-select" onchange="changeCategory()" class="w-full border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
+                </div>
+                <div class="w-full sm:w-1/2 relative">
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">キーワード検索</label>
+                    <input type="text" id="search-input" oninput="filterList()" placeholder="英語または日本語で検索..." class="w-full border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+            </div>
+
+            <!-- ハンズフリー連続再生パネル -->
+            <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4 no-print">
+                <div class="flex flex-col sm:flex-row justify-between items-center gap-4 border-b pb-4">
+                    <div>
+                        <h2 class="text-base sm:text-lg font-bold text-slate-700">🎧 ハンズフリー連続再生</h2>
+                        <p class="text-xs text-slate-500 mt-1">10問ずつのブロック、またはカテゴリ全体（100問まるごと）の再生が選べます。</p>
+                    </div>
+                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+                        <select id="block-select" class="border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full sm:w-auto"></select>
+                        <button id="playlist-play-btn" onclick="togglePlaylistPlay()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 px-5 rounded-xl transition text-sm whitespace-nowrap shadow-md">
+                            ▶ 再生スタート
+                        </button>
+                    </div>
+                </div>
+                <div id="player-status" class="hidden bg-indigo-50 border border-indigo-100 p-3 sm:p-4 rounded-xl text-center text-indigo-800 font-medium text-xs sm:text-sm">
+                    🎵 再生中... <span id="player-current-info" class="font-bold"></span>
+                </div>
+            </div>
+
+            <!-- 小テスト用 PDF出力パネル -->
+            <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4 no-print">
+                <div class="flex flex-col lg:flex-row justify-between items-center gap-4">
+                    <div>
+                        <h2 class="text-base sm:text-lg font-bold text-slate-700">📄 小テスト用 PDF出力機能</h2>
+                        <p class="text-xs text-slate-500 mt-1">指定範囲の問題を縦25問×2列（計50問）のA4レイアウトで印刷・PDF化できます。</p>
+                    </div>
+                    <div class="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3 w-full lg:w-auto">
+                        <div class="w-full sm:w-auto">
+                            <label class="block text-[10px] font-semibold text-slate-400 mb-0.5">出力範囲 (50問単位)</label>
+                            <select id="pdf-range-select" class="border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full"></select>
+                        </div>
+                        <div class="w-full sm:w-auto">
+                            <label class="block text-[10px] font-semibold text-slate-400 mb-0.5">テスト形式</label>
+                            <select id="pdf-mode-select" class="border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full">
+                                <option value="e2j">英訳テスト (日本語→英語)</option>
+                                <option value="j2e">和訳テスト (英語→日本語)</option>
+                            </select>
+                        </div>
+                        <div class="w-full sm:w-auto self-end">
+                            <button onclick="generatePDFView()" class="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 px-5 rounded-xl transition text-sm whitespace-nowrap shadow-md">
+                                🖨️ PDF出力 (印刷)
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 単語リストテーブル -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden no-print">
+                <div class="max-h-[500px] overflow-y-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead class="bg-slate-100 sticky top-0 text-[11px] sm:text-xs font-semibold text-slate-600 uppercase">
+                            <tr>
+                                <th class="p-3 sm:p-4 w-12 sm:w-16 text-center">No.</th>
+                                <th class="p-3 sm:p-4 w-1/3 sm:w-1/4">① 英語 / ② 和訳</th>
+                                <th class="p-3 sm:p-4">③ 例文(日本語) / ④ 例文(英語)</th>
+                                <th class="p-3 sm:p-4 w-20 sm:w-28 text-center">要復習</th>
+                                <th class="p-3 sm:p-4 w-20 sm:w-28 text-center">学習状況</th>
+                                <th class="p-3 sm:p-4 w-16 sm:w-20 text-center">音声</th>
+                            </tr>
+                        </thead>
+                        <tbody id="word-table-body" class="divide-y divide-slate-100 text-xs sm:text-sm"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- クイズタブ -->
+        <section id="tab-quiz" class="hidden space-y-6 no-print">
+            <div id="quiz-setup" class="bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-slate-100 text-center max-w-xl mx-auto space-y-6">
+                <h2 class="text-xl sm:text-2xl font-bold text-slate-700">リスニング確認テスト</h2>
+                <p class="text-slate-500 text-xs sm:text-sm">テストの種類と出題範囲を選んでスタートしてください。</p>
+                
+                <div class="space-y-4 text-left">
+                    <div>
+                        <label class="block text-xs sm:text-sm font-semibold text-slate-600 mb-2">① テストの種類を選択</label>
+                        <select id="quiz-mode-type" onchange="toggleQuizModeType()" class="w-full border border-slate-200 rounded-xl px-4 py-3 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="normal">通常テスト (順番通り)</option>
+                            <option value="random">🔀 ランダムに出題 (シャッフル)</option>
+                            <option value="checked">⭐ チェックした問題の復習テスト</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs sm:text-sm font-semibold text-slate-600 mb-2">② カテゴリを選択 (100問区切り)</label>
+                        <select id="quiz-category" onchange="updateRangeOptions()" class="w-full border border-slate-200 rounded-xl px-4 py-3 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
+                    </div>
+
+                    <div id="normal-range-container">
+                        <label class="block text-xs sm:text-sm font-semibold text-slate-600 mb-2">③ 出題範囲</label>
+                        <select id="quiz-range" class="w-full border border-slate-200 rounded-xl px-4 py-3 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
+                    </div>
+                </div>
+
+                <button onclick="startQuiz()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-xl transition shadow-lg shadow-indigo-100">
+                    テストを開始する
+                </button>
+            </div>
+
+            <!-- クイズ画面 -->
+            <div id="quiz-play" class="hidden bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-slate-100 max-w-xl mx-auto space-y-6">
+                <div class="flex justify-between items-center text-xs sm:text-sm font-semibold text-slate-400">
+                    <span id="quiz-progress">問題 1 / 10</span>
+                    <span id="quiz-score" class="text-indigo-600">正解数: 0</span>
+                </div>
+                <div class="text-center py-4 space-y-3">
+                    <span class="text-xs font-bold text-indigo-500 tracking-wider uppercase bg-indigo-50 px-3 py-1 rounded-full">音声をよく聞いてください</span>
+                    
+                    <div>
+                        <button onclick="playCurrentAudio()" class="inline-flex items-center gap-2 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-semibold py-2 px-5 rounded-full transition text-xs sm:text-sm shadow-sm">
+                            🔊 もう一度音声を聞く
+                        </button>
+                    </div>
+
+                    <div>
+                        <button id="show-word-btn" onclick="revealWord()" class="text-xs text-slate-500 hover:text-indigo-600 underline transition">
+                            聞き取れないときは？ (単語を表示する)
+                        </button>
+                    </div>
+
+                    <div id="quiz-question-word" class="text-xl sm:text-2xl font-bold text-indigo-600 mt-2 hidden bg-slate-50 py-2 rounded-xl border border-dashed border-slate-200"></div>
+                </div>
+
+                <div id="quiz-options" class="grid grid-cols-1 gap-3"></div>
+                <div id="quiz-feedback" class="hidden text-center p-4 rounded-xl font-medium text-xs sm:text-sm"></div>
+                <button id="next-btn" onclick="nextQuestion()" class="hidden w-full bg-slate-800 hover:bg-slate-900 text-white font-semibold py-3 px-6 rounded-xl transition text-sm">
+                    次の問題へ
+                </button>
+            </div>
+
+            <!-- 結果画面 -->
+            <div id="quiz-result" class="hidden bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-slate-100 max-w-xl mx-auto text-center space-y-6">
+                <h2 class="text-xl sm:text-2xl font-bold text-slate-700">テスト結果</h2>
+                <div class="py-6">
+                    <p class="text-slate-500 text-sm">あなたの正解数は</p>
+                    <p class="text-4xl sm:text-5xl font-extrabold text-indigo-600 mt-2"><span id="final-score">0</span> / <span id="total-quiz-count">10</span></p>
+                </div>
+                <div id="missed-summary" class="text-left bg-slate-50 p-4 rounded-xl text-xs sm:text-sm text-slate-600 space-y-1"></div>
+                <button onclick="resetQuiz()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-xl transition text-sm">
+                    もう一度挑戦する
+                </button>
+            </div>
+        </section>
+
+        <!-- がんばり記録タブ -->
+        <section id="tab-records" class="hidden space-y-6 no-print">
+            <div class="bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-slate-100 max-w-2xl mx-auto space-y-6">
+                <div class="text-center space-y-2">
+                    <h2 class="text-xl sm:text-2xl font-bold text-slate-700">🌟 ぼく・わたしの学習がんばり記録</h2>
+                    <p class="text-slate-500 text-xs sm:text-sm">毎日コツコツ続けた記録と、ご褒美メッセージを確認できます！</p>
+                </div>
+
+                <!-- 達成メッセージカード -->
+                <div id="achievement-banner" class="bg-gradient-to-r from-amber-500 to-orange-500 text-white p-5 rounded-2xl shadow-md text-center space-y-2">
+                    <div id="achievement-badge" class="text-2xl font-black">🎉 継続は力なり！</div>
+                    <div id="achievement-text" class="text-xs sm:text-sm font-medium">学習をスタートして、自分だけの記録を作ろう！</div>
+                </div>
+
+                <!-- サマリー統計カード -->
+                <div class="grid grid-cols-2 gap-4 text-center">
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                        <div class="text-xs text-slate-400 font-semibold">トータル学習回数</div>
+                        <div id="stat-total-count" class="text-2xl sm:text-3xl font-extrabold text-indigo-600 mt-1">0 回</div>
+                    </div>
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                        <div class="text-xs text-slate-400 font-semibold">累積学習時間</div>
+                        <div id="stat-total-time" class="text-2xl sm:text-3xl font-extrabold text-emerald-600 mt-1">0 分</div>
+                    </div>
+                </div>
+
+                <!-- 履歴リスト -->
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center">
+                        <h3 class="font-bold text-slate-700 text-sm">📜 最近の学習履歴</h3>
+                        <button onclick="clearStudyLogs()" class="text-xs text-rose-500 hover:underline">履歴をリセット</button>
+                    </div>
+                    <div class="max-h-60 overflow-y-auto space-y-2 border border-slate-100 rounded-xl p-3 bg-slate-50" id="study-logs-container">
+                        <div class="text-center text-xs text-slate-400 py-4">まだ学習履歴がありません。再生を完了するとここに記録されます！</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 単語登録・データ管理タブ -->
+        <section id="tab-import" class="hidden space-y-6 no-print">
+            <div class="bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-slate-100 max-w-xl mx-auto space-y-8">
+                <!-- Excelインポート -->
+                <div class="space-y-4">
+                    <div>
+                        <h2 class="text-lg sm:text-xl font-bold text-slate-700">📥 Excelファイルから単語を追加</h2>
+                        <p class="text-xs text-slate-500 mt-1">Excelファイルを選択し、取り込みたい「単語番号（No.）」の範囲を指定してインポートできます。</p>
+                    </div>
+
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-xs sm:text-sm font-semibold text-slate-600 mb-1">① Excelファイルを選択</label>
+                            <input type="file" id="import-file-input" accept=".xlsx, .xls, .csv" onchange="handleFileSelected(event)" class="w-full border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 text-xs sm:text-sm file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs sm:file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+                            <p id="file-name-display" class="text-xs text-slate-400 mt-1">選択されていません</p>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs sm:text-sm font-semibold text-slate-600 mb-1">② シートを選択</label>
+                            <select id="import-sheet-select" class="w-full border border-slate-200 rounded-xl px-3 py-3 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" disabled>
+                                <option value="">(先にファイルを選択してください)</option>
+                            </select>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs sm:text-sm font-semibold text-slate-600 mb-1">③ 開始番号 (例: 1)</label>
+                                <input type="number" id="import-start-no" value="1" min="1" class="w-full border border-slate-200 rounded-xl px-3 py-2.5 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs sm:text-sm font-semibold text-slate-600 mb-1">④ 終了番号 (例: 1000)</label>
+                                <input type="number" id="import-end-no" value="1000" min="1" class="w-full border border-slate-200 rounded-xl px-3 py-2.5 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            </div>
+                        </div>
+                        <p class="text-[11px] text-amber-600 bg-amber-50 p-2.5 rounded-xl border border-amber-100">
+                            💡 表に書かれている**「単語のNo.」**をそのまま指定できます。一度に最大1000語まで指定可能です。<br>
+                            💡 読み間違いを防ぎたい場合は、文章に **`一貫【いっかん】`** のように【ひらがな】を添えてください。
+                        </p>
+                    </div>
+
+                    <button onclick="executeImport()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 px-6 rounded-xl transition shadow-md shadow-emerald-100 text-sm">
+                        ✨ データをインポートして追加する
+                    </button>
+                    <div id="import-result-message" class="hidden text-center p-3 rounded-xl text-xs sm:text-sm font-medium"></div>
+                </div>
+
+                <hr class="border-slate-100">
+
+                <!-- データのエクスポート・インポート（バックアップ機能） -->
+                <div class="space-y-4">
+                    <div>
+                        <h2 class="text-lg sm:text-xl font-bold text-slate-700">💾 学習データのエクスポート / 復元</h2>
+                        <p class="text-xs text-slate-500 mt-1">現在の追加データや学習進捗（チェック・再生回数・がんばり記録）をファイルとして保存・復元できます。</p>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <button onclick="exportAppData()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-4 rounded-xl transition text-xs sm:text-sm shadow-sm">
+                            📤 データを保存（エクスポート）
+                        </button>
+                        <label class="w-full bg-slate-700 hover:bg-slate-800 text-white font-semibold py-3 px-4 rounded-xl transition text-xs sm:text-sm text-center cursor-pointer shadow-sm">
+                            📥 データを復元（インポート）
+                            <input type="file" accept=".json" onchange="importAppData(event)" class="hidden">
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div id="print-area" class="hidden bg-white p-2"></div>
+
+    </main>
+
+    <footer class="text-center py-6 text-xs text-slate-400 no-print">
+        英単語チェック範囲表 & 英熟語データ対応 学習アプリ
+    </footer>
+
+    <script>
+        // 表示用テキスト整形（【ふりがな】を消して見た目をキレイにする）
+        function formatDisplayText(text) {
+            if (!text) return "";
+            return text.replace(/【[^】]*】/g, '');
+        }
+
+ // 音声読み上げ用テキスト整形（漢字＋送り仮名【よみがな】をよみがなだけにする）
+function formatSpeechJapaneseText(text) {
+    if (!text) return "";
+    
+    // 1. 【よみがな】の直前にある「漢字＋送り仮名（ひらがな）」のカタマリを【よみがな】に置換
+    // （例：「許す【ゆるす】」→「ゆるす」、「告白【こくはく】」→「こくはく」）
+    let cleaned = text.replace(/[\u4e00-\u9faf]+[\u3040-\u309f]*【([^】]+)】/g, '$1');
+    
+    // 2. 残った【よみがな】のカッコだけを除去（予備処理）
+    cleaned = cleaned.replace(/【([^】]+)】/g, '$1');
+    
+    // 3. 記号や丸数字などを除去
+    return cleaned.replace(/[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳]/g, '')
+                  .replace(/[()（）~〜]/g, ' ')
+                  .replace(/\s+/g, ' ')
+                  .trim();
+}
+
+        // 初期データストア
+        let dataStore = {
+            cat1: [
+                {no: 1, en: "agree", ja: "①同意する ②(主語の中で)意見が一貫【いっかん】する ③(気候・食べ物が)合う", exJa: "私はあなたの計画に同意します。", exEn: "I agree with your plan.", listenCount: 0, lastDate: "-", isUserChecked: false},
+                {no: 2, en: "oppose", ja: "①~に反対する", exJa: "彼らは新しい税制案に反対している。", exEn: "They oppose the new tax proposal.", listenCount: 0, lastDate: "-", isUserChecked: false},
+                {no: 3, en: "advise", ja: "①~に忠告する、助言する", exJa: "先生は私たちに毎日勉強するよう助言した。", exEn: "The teacher advised us to study daily.", listenCount: 0, lastDate: "-", isUserChecked: false},
+                {no: 4, en: "tip", ja: "①助言、ヒント ②チップ ③先端", exJa: "彼女は料理の役に立つヒントをくれた。", exEn: "She gave me a useful tip for cooking.", listenCount: 0, lastDate: "-", isUserChecked: false},
+                {no: 5, en: "discuss", ja: "①~について話し合う、議論する ②~を話題に出す", exJa: "私たちは明日その問題について話し合う。", exEn: "We will discuss the problem tomorrow.", listenCount: 0, lastDate: "-", isUserChecked: false},
+                {no: 6, en: "blend", ja: "①~を混ぜ合わせる ②調和する 混合(物)", exJa: "コーヒー豆をブレンドする。", exEn: "Blend the coffee beans.", listenCount: 0, lastDate: "-", isUserChecked: false},
+                {no: 7, en: "cooperate", ja: "協力する", exJa: "私たちは彼らと協力した。", exEn: "We cooperated with them.", listenCount: 0, lastDate: "-", isUserChecked: false},
+                {no: 8, en: "consistent", ja: "①(言動などが)一貫【いっかん】した ②一致した", exJa: "彼の主張は一貫【いっかん】している。", exEn: "His statement is consistent.", listenCount: 0, lastDate: "-", isUserChecked: false},
+                {no: 9, en: "contrary", ja: "反対の 逆", exJa: "予想に反して、彼は合格した。", exEn: "Contrary to expectations, he passed.", listenCount: 0, lastDate: "-", isUserChecked: false},
+                {no: 10, en: "differ", ja: "①異なる ②意見が違う", exJa: "私たちの意見は異なる。", exEn: "Our opinions differ.", listenCount: 0, lastDate: "-", isUserChecked: false}
+            ]
+        };
+
+        let studyLogs = [];
+
+        // --- タブ切り替え機能 ---
+        function switchTab(tabId) {
+            document.getElementById('tab-list').classList.add('hidden');
+            document.getElementById('tab-quiz').classList.add('hidden');
+            document.getElementById('tab-records').classList.add('hidden');
+            document.getElementById('tab-import').classList.add('hidden');
+
+            document.getElementById('btn-list').classList.remove('bg-indigo-700');
+            document.getElementById('btn-quiz').classList.remove('bg-indigo-700');
+            document.getElementById('btn-records').classList.remove('bg-indigo-700');
+            document.getElementById('btn-import').classList.remove('bg-indigo-700');
+
+            document.getElementById('tab-' + tabId).classList.remove('hidden');
+            document.getElementById('btn-' + tabId).classList.add('bg-indigo-700');
+
+            if (tabId === 'records') {
+                renderStudyRecords();
+            }
+        }
+
+        // --- 初期化・セレクトボックス構築 ---
+        function initApp() {
+            const catSelect = document.getElementById('category-select');
+            if (catSelect) {
+                catSelect.innerHTML = '';
+                Object.keys(dataStore).forEach((key, index) => {
+                    const opt = document.createElement('option');
+                    opt.value = key;
+                    opt.textContent = `LEAP No. ${index * 100 + 1} - ${index * 100 + 100} (100語)`;
+                    catSelect.appendChild(opt);
+                });
+            }
+            updateBlockSelect();
+            renderList();
+            initQuizSelects();
+            initPdfRangeSelect();
+        }
+
+        function changeCategory() {
+            updateBlockSelect();
+            renderList();
+        }
+
+        function updateBlockSelect() {
+            const category = document.getElementById('category-select')?.value;
+            const blockSelect = document.getElementById('block-select');
+            if (!blockSelect || !category) return;
+
+            blockSelect.innerHTML = '';
+            const source = dataStore[category] || [];
+            const blockCount = Math.ceil(source.length / 10);
+
+            const allOpt = document.createElement('option');
+            allOpt.value = "all";
+            const startNum = source.length > 0 ? source[0].no : 1;
+            const endNum = source.length > 0 ? source[source.length - 1].no : 100;
+            allOpt.textContent = `🌟 このカテゴリ全問まるごと再生 (No. ${startNum} ～ ${endNum})`;
+            blockSelect.appendChild(allOpt);
+
+            for (let i = 0; i < blockCount; i++) {
+                const startNo = i * 10 + 1;
+                const endNo = Math.min((i + 1) * 10, source.length);
+                const opt = document.createElement('option');
+                opt.value = i * 10;
+                opt.textContent = `第 ${i + 1} ブロック (No. ${startNo} ～ ${endNo})`;
+                blockSelect.appendChild(opt);
+            }
+        }
+
+        function renderList() {
+            const category = document.getElementById('category-select')?.value;
+            const tbody = document.getElementById('word-table-body');
+            const searchInput = document.getElementById('search-input');
+            if (!tbody || !category) return;
+
+            const source = dataStore[category] || [];
+            const keyword = searchInput ? searchInput.value.toLowerCase() : "";
+            tbody.innerHTML = '';
+
+            source.forEach((item, index) => {
+                if (keyword && !String(item.no).includes(keyword) && !item.en.toLowerCase().includes(keyword) && !item.ja.includes(keyword)) {
+                    return;
+                }
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-50 transition";
+                tr.innerHTML = `
+                    <td class="p-3 sm:p-4 text-center font-bold text-slate-500">${item.no}</td>
+                    <td class="p-3 sm:p-4">
+                        <div class="font-bold text-indigo-600">${item.en}</div>
+                        <div class="text-slate-600 mt-0.5">${formatDisplayText(item.ja)}</div>
+                    </td>
+                    <td class="p-3 sm:p-4">
+                        <div class="text-slate-600">${formatDisplayText(item.exJa)}</div>
+                        <div class="text-slate-500 italic mt-0.5">${item.exEn}</div>
+                    </td>
+                    <td class="p-3 sm:p-4 text-center">
+                        <button onclick="toggleCheck('${category}', ${index})" class="text-lg transition ${item.isUserChecked ? 'text-amber-400 scale-110' : 'text-slate-200 hover:text-slate-300'}">
+                            ★
+                        </button>
+                    </td>
+                    <td class="p-3 sm:p-4 text-center text-xs text-slate-500">
+                        <div>回数: <span class="font-bold text-indigo-600">${item.listenCount || 0}</span></div>
+                        <div class="text-[10px] text-slate-400">${item.lastDate || '-'}</div>
+                    </td>
+                    <td class="p-3 sm:p-4 text-center">
+                        <button onclick="speakText('${item.en}', 'en-US')" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-600 p-2 rounded-xl transition">
+                            🔊
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function toggleCheck(category, index) {
+            const source = dataStore[category] || [];
+            if (source[index]) {
+                source[index].isUserChecked = !source[index].isUserChecked;
+                renderList();
+                saveToLocalStorage();
+            }
+        }
+
+        function filterList() {
+            renderList();
+        }
+
+        // --- 音声・読み上げ機能 ---
+        let currentUtterance = null;
+        function speakWithCallback(text, lang = 'en-US', rate = 0.9, onEndCallback) {
+            if (!('speechSynthesis' in window)) {
+                if (onEndCallback) onEndCallback();
+                return;
+            }
+            window.speechSynthesis.cancel();
+            
+            let cleanText = text;
+            if (lang === 'ja-JP') {
+                cleanText = formatSpeechJapaneseText(text);
+            }
+
+            const utterance = new SpeechSynthesisUtterance(cleanText);
+            utterance.lang = lang;
+            utterance.rate = rate;
+            utterance.onend = () => { if (onEndCallback) onEndCallback(); };
+            utterance.onerror = () => { if (onEndCallback) onEndCallback(); };
+            currentUtterance = utterance;
+            window.speechSynthesis.speak(utterance);
+        }
+
+        function speakText(text, lang = 'en-US') {
+            window.speechSynthesis.cancel();
+            let cleanText = text;
+            if (lang === 'ja-JP') {
+                cleanText = formatSpeechJapaneseText(text);
+            }
+            const utterance = new SpeechSynthesisUtterance(cleanText);
+            utterance.lang = lang;
+            utterance.rate = 0.9;
+            window.speechSynthesis.speak(utterance);
+        }
+
+        let isPlayingPlaylist = false;
+        let playlistQueue = [];
+        let playlistIndex = 0;
+        let activeChunkItems = [];
+        let studyStartTime = null;
+        let currentStudyRangeDesc = "";
+
+        function togglePlaylistPlay() {
+            if (isPlayingPlaylist) {
+                stopPlaylist(true);
+            } else {
+                startPlaylist();
+            }
+        }
+
+        function startPlaylist() {
+            const categorySelect = document.getElementById('category-select');
+            const blockSelectElem = document.getElementById('block-select');
+            const category = categorySelect.value;
+            const blockValue = blockSelectElem.value;
+            const source = dataStore[category] || [];
+
+            const catName = categorySelect.options[categorySelect.selectedIndex].text.replace(/\s*\(100語\)/, '');
+            const blockName = blockSelectElem.options[blockSelectElem.selectedIndex].text;
+            currentStudyRangeDesc = `${catName} ｜ ${blockName}`;
+
+            if (blockValue === "all") {
+                activeChunkItems = [...source];
+            } else {
+                const startIndex = parseInt(blockValue);
+                activeChunkItems = source.slice(startIndex, startIndex + 10);
+            }
+
+            if (activeChunkItems.length === 0) {
+                alert("再生するデータがありません。");
+                return;
+            }
+
+            playlistQueue = [];
+            activeChunkItems.forEach(item => {
+                playlistQueue.push({ text: item.en, lang: 'en-US', label: `[No.${item.no}] 英語: ${item.en}` });
+                playlistQueue.push({ text: item.ja, lang: 'ja-JP', label: `[No.${item.no}] 和訳: ${formatDisplayText(item.ja)}` });
+                playlistQueue.push({ text: item.exJa, lang: 'en-US', label: `[No.${item.no}] 例文(英): ${item.exJa}` });
+                playlistQueue.push({ text: item.exEn, lang: 'ja-JP', label: `[No.${item.no}] 例文(日): ${formatDisplayText(item.exEn)}` });
+            });
+
+            isPlayingPlaylist = true;
+            playlistIndex = 0;
+            studyStartTime = new Date();
+
+            const btn = document.getElementById('playlist-play-btn');
+            btn.innerText = '⏹ 停止する';
+            btn.className = "bg-rose-600 hover:bg-rose-700 text-white font-semibold py-2.5 px-5 rounded-xl transition text-sm whitespace-nowrap shadow-md";
+            document.getElementById('player-status').classList.remove('hidden');
+
+            playNextInQueue();
+        }
+
+        function playNextInQueue() {
+            if (!isPlayingPlaylist) return;
+
+            if (playlistIndex >= playlistQueue.length) {
+                recordListeningProgress(true);
+                playlistIndex = 0;
+            }
+
+            const currentItem = playlistQueue[playlistIndex];
+            document.getElementById('player-current-info').innerText = currentItem.label;
+            playlistIndex++;
+
+            speakWithCallback(currentItem.text, currentItem.lang, 0.9, () => {
+                setTimeout(() => {
+                    if (isPlayingPlaylist) {
+                        playNextInQueue();
+                    }
+                }, 600);
+            });
+        }
+
+        function recordListeningProgress(isCompleted) {
+            const today = new Date();
+            const dateStr = `${today.getMonth() + 1}/${today.getDate()}`;
+            activeChunkItems.forEach(item => {
+                item.listenCount = (item.listenCount || 0) + 1;
+                item.lastDate = dateStr;
+            });
+
+            if (studyStartTime) {
+                const durationMinutes = Math.max(1, Math.round((new Date() - studyStartTime) / 60000));
+                studyLogs.unshift({
+                    date: `${today.getFullYear()}/${today.getMonth() + 1}/${today.getDate()} ${String(today.getHours()).padStart(2, '0')}:${String(today.getMinutes()).padStart(2, '0')}`,
+                    range: currentStudyRangeDesc,
+                    duration: durationMinutes,
+                    status: isCompleted ? '全問完了クリア！' : '途中終了'
+                });
+                if (studyLogs.length > 50) studyLogs.pop();
+            }
+
+            studyStartTime = new Date();
+            saveToLocalStorage();
+            renderList();
+        }
+
+        function stopPlaylist(isManualStop = false) {
+            if (isManualStop && isPlayingPlaylist && studyStartTime) {
+                const today = new Date();
+                const durationMinutes = Math.max(1, Math.round((new Date() - studyStartTime) / 60000));
+                studyLogs.unshift({
+                    date: `${today.getFullYear()}/${today.getMonth() + 1}/${today.getDate()} ${String(today.getHours()).padStart(2, '0')}:${String(today.getMinutes()).padStart(2, '0')}`,
+                    range: currentStudyRangeDesc,
+                    duration: durationMinutes,
+                    status: '途中終了'
+                });
+                saveToLocalStorage();
+            }
+
+            isPlayingPlaylist = false;
+            window.speechSynthesis.cancel();
+            const btn = document.getElementById('playlist-play-btn');
+            btn.innerText = '▶ 再生スタート';
+            btn.className = "bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 px-5 rounded-xl transition text-sm whitespace-nowrap shadow-md";
+            document.getElementById('player-status').classList.add('hidden');
+        }
+
+        // --- がんばり記録の描画とメッセージ判定 ---
+        function renderStudyRecords() {
+            const totalCountElem = document.getElementById('stat-total-count');
+            const totalTimeElem = document.getElementById('stat-total-time');
+            const logsContainer = document.getElementById('study-logs-container');
+            const badgeElem = document.getElementById('achievement-badge');
+            const textElem = document.getElementById('achievement-text');
+
+            const totalCount = studyLogs.length;
+            const totalMinutes = studyLogs.reduce((acc, cur) => acc + cur.duration, 0);
+
+            if (totalCountElem) totalCountElem.innerText = `${totalCount} 回`;
+            if (totalTimeElem) totalTimeElem.innerText = `${totalMinutes} 分`;
+
+            if (totalCount === 0) {
+                badgeElem.innerText = "🌱 学習を始めよう！";
+                textElem.innerText = "「単語帳」タブから再生スタートを押すと、ここに記録とメッセージが残るよ！";
+            } else if (totalCount >= 20 || totalMinutes >= 60) {
+                badgeElem.innerText = "👑 20回達成・学習マスター！";
+                textElem.innerText = "すごすぎる！これだけの努力は絶対君の力になる！自信持って行こう！";
+            } else if (totalCount >= 10) {
+                badgeElem.innerText = "🔥 10回学習達成！おめでとう！";
+                textElem.innerText = "10回目の大台突破！毎日の積み重ねが素晴らしい！この調子でいこう！";
+            } else if (totalCount >= 5) {
+                badgeElem.innerText = "⭐ 5回学習クリア！いい調子！";
+                textElem.innerText = "習慣になってきたね！この調子でどんどん単語をマスターしていこう！";
+            } else {
+                badgeElem.innerText = "🚀 いいスタートを切ったね！";
+                textElem.innerText = "第一歩が一番大事！この調子でどんどん音声を聴きまくろう！";
+            }
+
+            if (logsContainer) {
+                if (studyLogs.length === 0) {
+                    logsContainer.innerHTML = `<div class="text-center text-xs text-slate-400 py-4">まだ学習履歴がありません。再生を完了するとここに記録されます！</div>`;
+                } else {
+                    logsContainer.innerHTML = '';
+                    studyLogs.forEach(log => {
+                        const div = document.createElement('div');
+                        div.className = "flex justify-between items-center bg-white p-3 rounded-xl border border-slate-100 text-xs";
+                        div.innerHTML = `
+                            <div>
+                                <div class="font-bold text-slate-700">${log.range}</div>
+                                <div class="text-[10px] text-slate-400">${log.date}</div>
+                            </div>
+                            <div class="text-right whitespace-nowrap ml-2">
+                                <span class="bg-indigo-50 text-indigo-700 font-bold px-2 py-1 rounded-lg">${log.duration}分</span>
+                                <span class="text-[10px] text-emerald-600 block mt-0.5">${log.status}</span>
+                            </div>
+                        `;
+                        logsContainer.appendChild(div);
+                    });
+                }
+            }
+        }
+
+        function clearStudyLogs() {
+            if (confirm("がんばり記録をリセットしますか？")) {
+                studyLogs = [];
+                saveToLocalStorage();
+                renderStudyRecords();
+            }
+        }
+
+        // --- テスト機能 ---
+        let quizQueue = [];
+        let currentQuizIndex = 0;
+        let quizScore = 0;
+        let missedWords = [];
+        let currentQuizTargetItem = null;
+
+        function toggleQuizModeType() {
+            const modeType = document.getElementById('quiz-mode-type').value;
+            const rangeContainer = document.getElementById('normal-range-container');
+            if (modeType === 'checked') {
+                rangeContainer.classList.add('hidden');
+            } else {
+                rangeContainer.classList.remove('hidden');
+            }
+        }
+
+        function initQuizSelects() {
+            const catSelect = document.getElementById('quiz-category');
+            if (catSelect) {
+                catSelect.innerHTML = '';
+                Object.keys(dataStore).forEach((key, index) => {
+                    const opt = document.createElement('option');
+                    opt.value = key;
+                    opt.textContent = `LEAP No. ${index * 100 + 1} - ${index * 100 + 100} (100語)`;
+                    catSelect.appendChild(opt);
+                });
+            }
+            updateRangeOptions();
+        }
+
+        function updateRangeOptions() {
+            const catKey = document.getElementById('quiz-category')?.value;
+            const rangeSelect = document.getElementById('quiz-range');
+            if (!rangeSelect || !catKey) return;
+            rangeSelect.innerHTML = '';
+            const source = dataStore[catKey] || [];
+            const blockCount = Math.ceil(source.length / 10);
+
+            const allOpt = document.createElement('option');
+            allOpt.value = "all";
+            const startNum = source.length > 0 ? source[0].no : 1;
+            const endNum = source.length > 0 ? source[source.length - 1].no : 100;
+            allOpt.textContent = `🌟 このカテゴリ全問まるごとテスト (No. ${startNum} ～ ${endNum})`;
+            rangeSelect.appendChild(allOpt);
+
+            for (let i = 0; i < blockCount; i++) {
+                const startNo = i * 10 + 1;
+                const endNo = Math.min((i + 1) * 10, source.length);
+                const opt = document.createElement('option');
+                opt.value = i * 10;
+                opt.textContent = `第 ${i + 1} ブロック (No. ${startNo} ～ ${endNo})`;
+                rangeSelect.appendChild(opt);
+            }
+        }
+
+        function startQuiz() {
+            const modeType = document.getElementById('quiz-mode-type').value;
+            const catKey = document.getElementById('quiz-category').value;
+            const source = dataStore[catKey] || [];
+
+            let targetItems = [];
+
+            if (modeType === 'checked') {
+                targetItems = source.filter(item => item.isUserChecked);
+                if (targetItems.length === 0) {
+                    alert("⭐ チェックがついている問題がありません。「単語帳」タブで★マークをつけてから再度お試しください。");
+                    return;
+                }
+            } else {
+                const rangeVal = document.getElementById('quiz-range').value;
+                if (rangeVal === "all") {
+                    targetItems = [...source];
+                } else {
+                    const startIndex = parseInt(rangeVal);
+                    targetItems = source.slice(startIndex, startIndex + 10);
+                }
+            }
+
+            if (targetItems.length === 0) {
+                alert("出題できる問題がありません。");
+                return;
+            }
+
+            if (modeType === 'random') {
+                quizQueue = [...targetItems].sort(() => Math.random() - 0.5);
+            } else {
+                quizQueue = [...targetItems];
+            }
+
+            currentQuizIndex = 0;
+            quizScore = 0;
+            missedWords = [];
+
+            document.getElementById('quiz-setup').classList.add('hidden');
+            document.getElementById('quiz-play').classList.remove('hidden');
+            document.getElementById('quiz-result').classList.add('hidden');
+
+            loadQuizQuestion();
+        }
+
+        function loadQuizQuestion() {
+            if (currentQuizIndex >= quizQueue.length) {
+                showQuizResult();
+                return;
+            }
+
+            currentQuizTargetItem = quizQueue[currentQuizIndex];
+            document.getElementById('quiz-progress').innerText = `問題 ${currentQuizIndex + 1} / ${quizQueue.length}`;
+            document.getElementById('quiz-score').innerText = `正解数: ${quizScore}`;
+            
+            document.getElementById('quiz-question-word').classList.add('hidden');
+            document.getElementById('quiz-question-word').innerText = `[No.${currentQuizTargetItem.no}] ${currentQuizTargetItem.en}`;
+            
+            document.getElementById('quiz-feedback').classList.add('hidden');
+            document.getElementById('next-btn').classList.add('hidden');
+
+            const catKey = document.getElementById('quiz-category').value;
+            const allSource = dataStore[catKey] || [];
+            let dummies = allSource.filter(item => item.no !== currentQuizTargetItem.no);
+            dummies.sort(() => Math.random() - 0.5);
+            
+            let options = [currentQuizTargetItem, ...dummies.slice(0, 3)];
+            options.sort(() => Math.random() - 0.5);
+
+            const optionsContainer = document.getElementById('quiz-options');
+            optionsContainer.innerHTML = '';
+
+            options.forEach(opt => {
+                const btn = document.createElement('button');
+                btn.className = "w-full text-left bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 p-4 rounded-xl transition text-sm font-medium text-slate-700";
+                btn.innerHTML = `${formatDisplayText(opt.ja)}`;
+                btn.onclick = () => checkQuizAnswer(opt.no === currentQuizTargetItem.no, btn);
+                optionsContainer.appendChild(btn);
+            });
+
+            setTimeout(() => {
+                speakText(currentQuizTargetItem.en, 'en-US');
+            }, 300);
+        }
+
+        function playCurrentAudio() {
+            if (currentQuizTargetItem) {
+                speakText(currentQuizTargetItem.en, 'en-US');
+            }
+        }
+
+        function revealWord() {
+            document.getElementById('quiz-question-word').classList.remove('hidden');
+        }
+
+        function checkQuizAnswer(isCorrect, selectedBtn) {
+            const optionsContainer = document.getElementById('quiz-options');
+            const buttons = optionsContainer.getElementsByTagName('button');
+            
+            for (let btn of buttons) {
+                btn.disabled = true;
+                if (btn.innerHTML === formatDisplayText(currentQuizTargetItem.ja)) {
+                    btn.classList.add('bg-emerald-100', 'border-emerald-400', 'text-emerald-800');
+                }
+            }
+
+            const feedbackDiv = document.getElementById('quiz-feedback');
+            feedbackDiv.classList.remove('hidden');
+
+            if (isCorrect) {
+                quizScore++;
+                feedbackDiv.className = "text-center p-4 rounded-xl font-medium text-xs sm:text-sm bg-emerald-50 text-emerald-700 border border-emerald-100";
+                feedbackDiv.innerText = `⭕ 正解です！ (${currentQuizTargetItem.en})`;
+            } else {
+                selectedBtn.classList.remove('bg-slate-50', 'hover:bg-indigo-50', 'border-slate-200');
+                selectedBtn.classList.add('bg-rose-100', 'border-rose-400', 'text-rose-800');
+                feedbackDiv.className = "text-center p-4 rounded-xl font-medium text-xs sm:text-sm bg-rose-50 text-rose-700 border border-rose-100";
+                feedbackDiv.innerText = `❌ 残念！正解は「${currentQuizTargetItem.en} : ${formatDisplayText(currentQuizTargetItem.ja)}」です。`;
+                missedWords.push(currentQuizTargetItem);
+            }
+
+            document.getElementById('quiz-score').innerText = `正解数: ${quizScore}`;
+            document.getElementById('next-btn').classList.remove('hidden');
+        }
+
+        function nextQuestion() {
+            currentQuizIndex++;
+            loadQuizQuestion();
+        }
+
+        function showQuizResult() {
+            document.getElementById('quiz-play').classList.add('hidden');
+            document.getElementById('quiz-result').classList.remove('hidden');
+            document.getElementById('final-score').innerText = quizScore;
+            document.getElementById('total-quiz-count').innerText = quizQueue.length;
+
+            const missedSummary = document.getElementById('missed-summary');
+            if (missedWords.length > 0) {
+                missedSummary.innerHTML = `<p class="font-bold text-slate-700 mb-1">📝 間違えた問題 (${missedWords.length}問):</p>` + 
+                    missedWords.map(w => `<div class="text-slate-600">[No.${w.no}] <span class="font-bold">${w.en}</span> - ${formatDisplayText(w.ja)}</div>`).join('');
+                
+                setTimeout(() => {
+                    if (confirm(`間違えた問題（${missedWords.length}問）を[要復習]（★）に追加しますか？`)) {
+                        missedWords.forEach(missed => {
+                            Object.keys(dataStore).forEach(catKey => {
+                                dataStore[catKey].forEach(item => {
+                                    if (item.no === missed.no) {
+                                        item.isUserChecked = true;
+                                    }
+                                });
+                            });
+                        });
+                        saveToLocalStorage();
+                        renderList();
+                        alert("間違えた問題を[要復習]（★）に追加しました！");
+                    }
+                }, 300);
+
+            } else {
+                missedSummary.innerHTML = `<p class="text-emerald-600 font-bold text-center">🎉 全問正解おめでとうございます！</p>`;
+            }
+        }
+
+        function resetQuiz() {
+            document.getElementById('quiz-result').classList.add('hidden');
+            document.getElementById('quiz-setup').classList.remove('hidden');
+        }
+
+        // --- Excel インポート機能 ---
+        let loadedWorkbook = null;
+
+        function handleFileSelected(event) {
+            const file = event.target.files[0];
+            const nameDisplay = document.getElementById('file-name-display');
+            const sheetSelect = document.getElementById('import-sheet-select');
+            
+            if (!file) {
+                if (nameDisplay) nameDisplay.innerText = "選択されていません";
+                return;
+            }
+            if (nameDisplay) nameDisplay.innerText = file.name;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    loadedWorkbook = XLSX.read(data, {type: 'array'});
+                    
+                    if (sheetSelect) {
+                        sheetSelect.innerHTML = '';
+                        loadedWorkbook.SheetNames.forEach(sheetName => {
+                            const opt = document.createElement('option');
+                            opt.value = sheetName;
+                            opt.textContent = sheetName;
+                            sheetSelect.appendChild(opt);
+                        });
+                        sheetSelect.disabled = false;
+                    }
+                } catch(err) {
+                    alert("Excelファイルの読み込みに失敗しました。");
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function executeImport() {
+            if (!loadedWorkbook) {
+                alert("先に有効なExcelファイルを選択してください。");
+                return;
+            }
+            const sheetSelect = document.getElementById('import-sheet-select');
+            const sheetName = sheetSelect.value;
+            const startNo = parseInt(document.getElementById('import-start-no').value) || 1;
+            const endNo = parseInt(document.getElementById('import-end-no').value) || 1000;
+
+            const worksheet = loadedWorkbook.Sheets[sheetName];
+            const rows = XLSX.utils.sheet_to_json(worksheet, {header: 1});
+
+            let newWords = [];
+            rows.forEach(row => {
+                if (!row || row.length === 0) return;
+
+                let no = null;
+                let validCols = row.filter(cell => cell !== null && cell !== undefined && String(cell).trim() !== "");
+                if (validCols.length >= 2) {
+                    for (let i = 0; i < Math.min(2, validCols.length); i++) {
+                        let parsedNo = parseInt(validCols[i]);
+                        if (!isNaN(parsedNo) && parsedNo > 0 && parsedNo < 10000) {
+                            no = parsedNo;
+                            break;
+                        }
+                    }
+
+                    if (no !== null) {
+                        let textCols = validCols.filter(cell => parseInt(cell) !== no);
+                        let en = String(textCols[0] || "").trim();
+                        let ja = String(textCols[1] || "").trim();
+                        let exJa = String(textCols[2] || "").trim();
+                        let exEn = String(textCols[3] || "").trim();
+
+                        if (no >= startNo && no <= endNo && en !== "") {
+                            newWords.push({
+                                no: no,
+                                en: en,
+                                ja: ja,
+                                exJa: exJa,
+                                exEn: exEn,
+                                listenCount: 0,
+                                lastDate: "-",
+                                isUserChecked: false
+                            });
+                        }
+                    }
+                }
+            });
+
+            if (newWords.length === 0) {
+                alert("指定された範囲（No. " + startNo + " 〜 " + endNo + "）に一致する単語が見つかりませんでした。\n開始番号が合っているかご確認ください。");
+                return;
+            }
+
+            newWords.forEach(word => {
+                const catIndex = Math.floor((word.no - 1) / 100);
+                const catKey = 'cat' + (catIndex + 1);
+                if (!dataStore[catKey]) {
+                    dataStore[catKey] = [];
+                }
+                const existingIdx = dataStore[catKey].findIndex(w => w.no === word.no);
+                if (existingIdx >= 0) {
+                    dataStore[catKey][existingIdx] = word;
+                } else {
+                    dataStore[catKey].push(word);
+                }
+            });
+
+            Object.keys(dataStore).forEach(key => {
+                dataStore[key].sort((a, b) => a.no - b.no);
+            });
+
+            saveToLocalStorage();
+            initApp();
+
+            const msgDiv = document.getElementById('import-result-message');
+            if (msgDiv) {
+                msgDiv.className = "text-center p-3 rounded-xl text-xs sm:text-sm font-medium bg-emerald-50 text-emerald-700 border border-emerald-100";
+                msgDiv.innerText = `${newWords.length} 語のインポートが完了しました！`;
+                msgDiv.classList.remove('hidden');
+            }
+        }
+
+        // --- PDF設定用初期化 ---
+        function initPdfRangeSelect() {
+            const pdfRange = document.getElementById('pdf-range-select');
+            if (!pdfRange) return;
+            pdfRange.innerHTML = '';
+            Object.keys(dataStore).forEach((key, index) => {
+                const opt = document.createElement('option');
+                opt.value = key;
+                opt.textContent = `LEAP No. ${index * 100 + 1} - ${index * 100 + 100}`;
+                pdfRange.appendChild(opt);
+            });
+        }
+
+        function generatePDFView() { window.print(); }
+
+        // --- ローカルストレージ保存・データ永続化 ---
+        function saveToLocalStorage() {
+            const appData = {
+                dataStore: dataStore,
+                studyLogs: studyLogs
+            };
+            localStorage.setItem('vocab_app_data_v2', JSON.stringify(appData));
+        }
+
+        function loadFromLocalStorage() {
+            const saved = localStorage.getItem('vocab_app_data_v2');
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    if (parsed.dataStore) dataStore = parsed.dataStore;
+                    if (parsed.studyLogs) studyLogs = parsed.studyLogs;
+                } catch(e) {}
+            } else {
+                const oldSaved = localStorage.getItem('vocab_app_data');
+                if (oldSaved) {
+                    try { dataStore = JSON.parse(oldSaved); } catch(e) {}
+                }
+            }
+        }
+
+        function exportAppData() {
+            const appData = {
+                dataStore: dataStore,
+                studyLogs: studyLogs
+            };
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(appData));
+            const dlAnchor = document.createElement('a');
+            dlAnchor.setAttribute("href", dataStr);
+            dlAnchor.setAttribute("download", "vocab_study_backup.json");
+            document.body.appendChild(dlAnchor);
+            dlAnchor.click();
+            dlAnchor.remove();
+        }
+
+        function importAppData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const parsed = JSON.parse(e.target.result);
+                    if (parsed.dataStore) {
+                        dataStore = parsed.dataStore;
+                        studyLogs = parsed.studyLogs || [];
+                    } else {
+                        dataStore = parsed;
+                    }
+                    saveToLocalStorage();
+                    initApp();
+                    alert("データを正常に復元しました！");
+                } catch(err) {
+                    alert("ファイルの読み込みに失敗しました。");
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // --- 起動時および選択状態の復元処理 ---
+        const STORAGE_KEY_LAST_CATEGORY = 'vocab_last_category';
+        const STORAGE_KEY_LAST_BLOCK = 'vocab_last_block';
+
+        document.getElementById('category-select')?.addEventListener('change', (e) => {
+            localStorage.setItem(STORAGE_KEY_LAST_CATEGORY, e.target.value);
+        });
+        document.getElementById('block-select')?.addEventListener('change', (e) => {
+            localStorage.setItem(STORAGE_KEY_LAST_BLOCK, e.target.value);
+        });
+
+        function restoreLastSelections() {
+            const lastCategory = localStorage.getItem(STORAGE_KEY_LAST_CATEGORY);
+            const lastBlock = localStorage.getItem(STORAGE_KEY_LAST_BLOCK);
+            
+            if (lastCategory) {
+                const catSelect = document.getElementById('category-select');
+                if (catSelect && [...catSelect.options].some(opt => opt.value === lastCategory)) {
+                    catSelect.value = lastCategory;
+                    catSelect.dispatchEvent(new Event('change'));
+                }
+            }
+            
+            if (lastBlock) {
+                setTimeout(() => {
+                    const blockSelect = document.getElementById('block-select');
+                    if (blockSelect && [...blockSelect.options].some(opt => opt.value === lastBlock)) {
+                        blockSelect.value = lastBlock;
+                        blockSelect.dispatchEvent(new Event('change'));
+                    }
+                }, 300);
+            }
+        }
+
+        // ページ読み込み時の実行
+        window.addEventListener('DOMContentLoaded', () => {
+            loadFromLocalStorage();
+            initApp();
+            setTimeout(restoreLastSelections, 200);
+        });
+    </script>
+</body>
+</html>
